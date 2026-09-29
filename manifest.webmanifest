@@ -1,0 +1,17 @@
+{
+  "name": "ドットの作業部屋",
+  "short_name": "作業部屋",
+  "description": "ドット絵の作業部屋。ポモドーロ・ToDo・環境音など、部屋の中の物から開ける作業ツール。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#161E22",
+  "theme_color": "#161E22",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
