@@ -1,6 +1,6 @@
 // Offline support: the page and its files are cached on first visit, then served from the cache.
 // Bump VERSION whenever you publish an update so phones pick up the new files.
-const VERSION='room-v1';
+const VERSION='room-v2';
 const CORE=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
