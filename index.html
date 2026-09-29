@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="作業部屋">
+<meta name="apple-mobile-web-app-title" content="workplace">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -256,12 +256,28 @@ input.plain.t{font-weight:600;width:100%}
 .fchip{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 8px}
 .fchip.on,.row button.on{border-color:var(--accent);background:var(--accent-soft)}
 .fchip .sw{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.3)}
+.objs{display:none}.hint{display:none}
+#drawerTab{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:8;writing-mode:vertical-rl;font-family:var(--pixel);font-size:13px;letter-spacing:.1em;padding:12px 6px;border-radius:6px 0 0 6px;border-right:0;background:var(--surface);box-shadow:-4px 0 12px rgba(0,0,0,.3)}
+#drawerTab[aria-expanded=true]{right:min(320px,86vw)}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(320px,86vw);z-index:9;background:var(--surface);border-left:2px solid var(--line);box-shadow:-12px 0 32px rgba(0,0,0,.4);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#drawer.open{transform:none}
+@media (prefers-reduced-motion:reduce){#drawer{transition:none}}
+#drawer .d-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+#drawer .d-h h2{margin:0;font-family:var(--pixel);font-size:16px;font-weight:400}
+#drawer .d-tabs{display:flex;gap:4px;padding:10px 12px 0;flex-wrap:wrap}
+#drawer .d-tabs button{font-family:var(--pixel);font-size:12px;padding:4px 10px}
+#drawer .d-tabs button.on{border-color:var(--accent);background:var(--accent-soft)}
+#drawer .d-b{overflow:auto;padding:10px 12px 16px;display:flex;flex-direction:column;gap:6px}
+#drawer .d-b button.item{text-align:left;font-family:var(--pixel);font-size:13px;display:flex;justify-content:space-between;gap:8px}
+#drawer .d-b button.item small{color:var(--muted);font-family:inherit;font-size:11px}
+#drawer .d-note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px}
+body.full #drawerTab,body.full #drawer{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>workplace</h1>
+    <h1>ドットの作業部屋</h1>
     <div class="worlds" role="group" aria-label="世界観">
       <button id="w-canal" data-w="canal">雨の運河</button>
       <button id="w-neon" data-w="neon">ネオン街</button>
@@ -282,6 +298,13 @@ input.plain.t{font-weight:600;width:100%}
   <span id="hudStatus"></span>
 </div>
 <div id="hudObjs" hidden></div>
+
+<button id="drawerTab" aria-controls="drawer" aria-expanded="false">できること</button>
+<aside id="drawer" aria-label="List">
+  <div class="d-h"><h2>List</h2><button class="ghost" id="dClose" aria-label="閉じる">閉じる ✕</button></div>
+  <div class="d-tabs" id="dTabs"></div>
+  <div class="d-b" id="dBody"></div>
+</aside>
 
 <aside id="panel" hidden>
   <div class="p-h"><h2 id="pTitle"></h2><button class="ghost" id="pClose" aria-label="閉じる">閉じる ✕</button></div>
@@ -430,12 +453,31 @@ let sleepAt=0,sleepSel='0',radioNeedle=null;
 // real recordings can replace any synthesised ambience: saved to the page (m4a/mp4/webm) or used just for this session
 const realBufs={},REAL_BUILTIN={};   // REAL_BUILTIN: kind -> asset id of a recording shipped with the page
 const realSrc=k=>(S.sounds.custom&&S.sounds.custom[k])||(REAL_BUILTIN[k]?{id:REAL_BUILTIN[k],name:'同梱の録音'}:null);
-async function loadReal(k,arrayBuf){const a=ac();if(!a)return false;try{const buf=arrayBuf||await (await fetch('/_blob/'+realSrc(k).id)).arrayBuffer();realBufs[k]=await a.decodeAudioData(buf);
+async function loadReal(k,arrayBuf){const a=ac();if(!a)return false;try{const buf=arrayBuf||await loadAudioRef(realSrc(k));realBufs[k]=await a.decodeAudioData(buf);
     if(chans[k]){try{chans[k].src.stop()}catch(e){}delete chans[k];applySounds()}return true}catch(e){return false}}
 function ensureChan(k){const a=ac();if(!a)return null;if(chans[k])return chans[k];const real=realBufs[k];if(!real&&realSrc(k))loadReal(k);bufs[k]=bufs[k]||makeBuf(k);
   const src=a.createBufferSource();src.buffer=real||bufs[k];src.loop=true;const f=a.createBiquadFilter();if(real){f.type='lowpass';f.frequency.value=k==='talk'?3200:12000}else{f.type=FILT[k][0];f.frequency.value=FILT[k][1]}if(k==='cafe'&&!real)f.Q.value=.6;
   const gn=a.createGain();gn.gain.value=0;src.connect(f);f.connect(gn);gn.connect(masterG);src.start();chans[k]={src,gn};return chans[k]}
-function applySounds(){if(!soundsOn)return;const mix=effMix();for(const k in SND){const v=mix[k]||0;if(v>0){const c=ensureChan(k);if(c)c.gn.gain.setTargetAtTime(v,AC.currentTime,.1)}else if(chans[k])chans[k].gn.gain.setTargetAtTime(0,AC.currentTime,.1)}if(masterG)masterG.gain.setTargetAtTime(S.sounds.master,AC.currentTime,.1)}
+// ---- your own ambient sounds, added from the radio: extra channels on top of the built-in ones.
+// Files go to the page's asset store when it has one (shared by PC and phone); otherwise they are kept in this browser (IndexedDB).
+const AUDIO_DB='pixelroom-audio';
+function idb(){return new Promise((ok,ng)=>{try{const r=indexedDB.open(AUDIO_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error)}catch(e){ng(e)}})}
+async function idbPut(k,v){const db=await idb();return new Promise((ok,ng)=>{const t=db.transaction('f','readwrite');t.objectStore('f').put(v,k);t.oncomplete=()=>ok();t.onerror=()=>ng(t.error)})}
+async function idbGet(k){const db=await idb();return new Promise((ok,ng)=>{const t=db.transaction('f');const q=t.objectStore('f').get(k);q.onsuccess=()=>ok(q.result);q.onerror=()=>ng(q.error)})}
+async function idbDel(k){try{const db=await idb();db.transaction('f','readwrite').objectStore('f').delete(k)}catch(e){}}
+async function saveAudioFile(f){const saveable=/\.(m4a|mp4|webm)$/i.test(f.name)||/^(video\/(mp4|webm)|audio\/(mp4|x-m4a|webm))$/.test(f.type);
+  if(assetsNS&&saveable&&f.size<=20*1024*1024){const type=/webm/i.test(f.name)||/webm/.test(f.type)?'video/webm':'video/mp4';const r=await assetsNS.upload(f,{type});return{id:r.id,where:'asset'}}
+  const id='a'+uid()+uid();await idbPut(id,await f.arrayBuffer());return{id,where:'idb'}}
+async function loadAudioRef(ref){if(ref.where==='idb'){const b=await idbGet(ref.id);if(!b)throw new Error('missing');return b.slice(0)}return await (await fetch('/_blob/'+ref.id)).arrayBuffer()}
+async function dropAudioRef(ref){if(!ref)return;if(ref.where==='idb')return idbDel(ref.id);if(assetsNS)try{await assetsNS.delete(ref.id)}catch(e){}}
+const extraBufs={},extraFail={};
+function extras(){return S.sounds.extra||(S.sounds.extra=[])}
+async function loadExtra(x){const a=ac();if(!a||extraBufs[x.key]||extraFail[x.key])return;extraFail[x.key]='loading';try{extraBufs[x.key]=await a.decodeAudioData(await loadAudioRef(x));delete extraFail[x.key];applySounds()}catch(e){extraFail[x.key]='missing';if(openId==='radio')renderPanel()}}
+function ensureExtra(x){const a=ac(),k='x:'+x.key;if(!a)return null;if(chans[k])return chans[k];const buf=extraBufs[x.key];if(!buf){loadExtra(x);return null}
+  const src=a.createBufferSource();src.buffer=buf;src.loop=true;const gn=a.createGain();gn.gain.value=0;src.connect(gn);gn.connect(masterG);src.start();chans[k]={src,gn};return chans[k]}
+function applySounds(){if(!soundsOn)return;const mix=effMix();for(const k in SND){const v=mix[k]||0;if(v>0){const c=ensureChan(k);if(c)c.gn.gain.setTargetAtTime(v,AC.currentTime,.1)}else if(chans[k])chans[k].gn.gain.setTargetAtTime(0,AC.currentTime,.1)}
+  for(const x of extras()){const k='x:'+x.key,v=x.vol||0;if(v>0){const c=ensureExtra(x);if(c)c.gn.gain.setTargetAtTime(v,AC.currentTime,.1)}else if(chans[k])chans[k].gn.gain.setTargetAtTime(0,AC.currentTime,.1)}
+  if(masterG)masterG.gain.setTargetAtTime(S.sounds.master,AC.currentTime,.1)}
 function startSounds(){if(!ac())return;soundsOn=true;applySounds()}
 function stopSounds(){soundsOn=false;sleepAt=0;for(const k in chans){try{chans[k].src.stop()}catch(e){}delete chans[k]}}
 const rainAudible=()=>soundsOn&&(effMix().rain||0)>0;
@@ -2083,7 +2125,21 @@ cv.addEventListener('pointerleave',()=>{hover=null;tip.hidden=true});
 cv.addEventListener('click',ev=>{const{h}=hit(ev);if(h)activate(h.id)});
 function activate(id){if(id==='furin'){ringFurin();return}if(id==='can'){wateringUntil=Date.now()+3500;if(!S.motion)draw();return}if(id==='monitor'){openPC();return}if(id==='cork'){openPC('habits');return}if(id==='cat'){petCat();if(!S.motion)draw();return}openPanel(id)}
 const objs=document.getElementById('objs');
-function renderObjs(){objs.replaceChildren(...hs().map(h=>el('button',{text:h.label,onclick:()=>activate(h.id)})))}
+function renderObjs(){objs.replaceChildren(...hs().map(h=>el('button',{text:h.label,onclick:()=>activate(h.id)})));if(drawerEl.classList.contains('open'))renderDrawer()}
+/* ================= side drawer: everything you can open, grouped, on a sliding sheet at the right edge ================= */
+const DRAWER_GROUPS=[['work','作業',['clock','notebook','monitor','calendar','shelf']],['mood','雰囲気',['radio','lamp','drink','sky']],['room','部屋',['person','rug','wshelf','hang','cat','can','furin','teru']],['all','すべて',null]];
+let drawerTab=(()=>{try{return localStorage.getItem('pixelroom.drawerTab')||'work'}catch(e){return'work'}})();
+const drawerEl=document.getElementById('drawer'),drawerBtn=document.getElementById('drawerTab');
+function setDrawer(open){drawerEl.classList.toggle('open',open);drawerBtn.setAttribute('aria-expanded',open?'true':'false');drawerBtn.textContent=open?'閉じる':'できること';if(open)renderDrawer()}
+function renderDrawer(){const list=hs(),g=DRAWER_GROUPS.find(x=>x[0]===drawerTab)||DRAWER_GROUPS[0];
+  document.getElementById('dTabs').replaceChildren(...DRAWER_GROUPS.map(([k,n])=>el('button',{text:n,class:k===drawerTab?'on':'',onclick:()=>{drawerTab=k;try{localStorage.setItem('pixelroom.drawerTab',k)}catch(e){}renderDrawer()}})));
+  const seen=new Set(),items=[];for(const h of list){if(seen.has(h.id))continue;seen.add(h.id);if(!g[2]||g[2].includes(h.id))items.push(h)}
+  if(g[2])items.sort((a,b)=>g[2].indexOf(a.id)-g[2].indexOf(b.id));
+  document.getElementById('dBody').replaceChildren(...items.map(h=>{const m=/^(.*?)（(.*)）$/.exec(h.label);return el('button',{class:'item',onclick:()=>{setDrawer(false);activate(h.id)}},el('span',{text:m?m[1]:h.label}),m?el('small',{text:m[2]}):null)}),
+    el('div',{class:'d-note',text:'絵の中の物を直接クリックしても開けます。窓をクリックすると、風・雨・水面の動きを調整できます。'}))}
+drawerBtn.onclick=()=>setDrawer(!drawerEl.classList.contains('open'));document.getElementById('dClose').onclick=()=>setDrawer(false);
+addEventListener('keydown',e=>{if(e.key==='Escape'&&drawerEl.classList.contains('open'))setDrawer(false)});
+
 function setWorld(w,noSave){S.world=w;document.documentElement.setAttribute('data-world',w);document.querySelectorAll('[data-w]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.w===w?'true':'false'));willow=null;renderObjs();if(!noSave)save();draw();if(openId)renderPanel()}
 document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>setWorld(b.dataset.w));
 document.getElementById('hudWorld').onclick=()=>setWorld(S.world==='canal'?'neon':'canal');
@@ -2265,12 +2321,25 @@ const PANELS={
       el('div',{class:'sec'},el('div',{class:'lbl',text:'おやすみタイマー'}),tabs(sleepAt?sleepSel:'0',[['0','なし'],['15','15分'],['30','30分'],['60','60分']],k=>{sleepSel=k;sleepAt=k==='0'?0:Date.now()+(+k)*60000;if(sleepAt&&!soundsOn)startSounds();renderPanel()}),
         el('div',{class:'sub',text:sleepAt?'あと約'+left+'分でゆっくり音が消えます。':'時間が来ると音がゆっくり小さくなって止まります。'})),
       el('details',{class:'sec'},el('summary',{class:'lbl',text:'ミキサーで細かく調整する'}),Object.entries(SND).map(([k,name])=>slider(name,'sc-'+k,(cur==='auto'?autoMix():s.ch)[k]||0,v=>{if(s.preset==='auto'){const m=autoMix();s.ch={};for(const kk in SND)s.ch[kk]=m[kk]||0}s.preset='custom';s.ch[k]=v;save();applySounds()})),
+        extras().map(x=>slider('＋'+x.name,'sx-'+x.key,x.vol||0,v=>{x.vol=v;save();if(v>0&&!soundsOn)startSounds();applySounds()})),
         el('div',{class:'sub',text:'動かすとチャンネルは「自分の組み合わせ」になります。スマホでは電源を入れるまで音は鳴りません。'})),
+      (()=>{const X=extras(),nm=el('input',{type:'text',id:'xname',placeholder:'名前（例：焚き火、海辺、図書館）',maxlength:20}),msg=el('div',{class:'sub',id:'xmsg'});
+        const fi=el('input',{type:'file',id:'xf',accept:'audio/*,video/mp4,video/webm',class:'file',onchange:async e=>{const f=e.target.files[0];if(!f)return;if(X.length>=8){msg.textContent='追加できるのは8つまでです。';return}
+          const a=ac();msg.textContent='読み込み中… '+f.name;let buf;try{buf=await a.decodeAudioData((await f.arrayBuffer()).slice(0))}catch(err){msg.textContent='この形式は再生できませんでした。';return}
+          msg.textContent='保存中…';let ref;try{ref=await saveAudioFile(f)}catch(err){msg.textContent='保存できませんでした（容量がいっぱいかもしれません）。';return}
+          const key=uid();extraBufs[key]=buf;X.push({key,name:(nm.value.trim()||f.name.replace(/\.[^.]+$/,'')).slice(0,20),id:ref.id,where:ref.where,vol:.5});save();if(!soundsOn)startSounds();applySounds();renderPanel()}});
+        return el('details',{class:'sec',open:X.length>0},el('summary',{class:'lbl',text:'環境音を追加する（'+X.length+'/8）'}),
+          el('div',{class:'sub',text:'好きな録音ファイルを、新しい環境音として足せます。今のチャンネルに重ねて鳴り、音量は個別に調整できます。'}),
+          el('div',{class:'row'},nm),el('div',{class:'row'},el('label',{class:'filebtn',for:'xf'},'ファイルを選んで追加'),fi),msg,
+          X.length?el('div',{},X.map(x=>el('div',{class:'row',style:'align-items:center;gap:8px'},
+            el('div',{style:'flex:1;min-width:0'},slider(x.name+(extraFail[x.key]==='missing'?'（この端末にはありません）':x.where==='idb'?'（この端末）':''),'sx2-'+x.key,x.vol||0,v=>{x.vol=v;save();if(v>0&&!soundsOn)startSounds();applySounds()})),
+            el('button',{class:'ghost','aria-label':'削除',text:'✕',onclick:async()=>{const k='x:'+x.key;if(chans[k]){try{chans[k].src.stop()}catch(e){}delete chans[k]}delete extraBufs[x.key];await dropAudioRef(x);S.sounds.extra=X.filter(y=>y!==x);save();renderPanel()}})))):null,
+          el('div',{class:'sub',text:assetsNS?'m4a・mp4・webm（20MBまで）はPCとスマホで共通に使えます。mp3やwavはこの端末にだけ保存されます。':'ファイルはこの端末のブラウザに保存されます（mp3・wav・m4a など）。ループ再生されるので、切れ目の目立たない1〜3分の録音がおすすめです。'}))})(),
       (()=>{const cs=s.custom||(s.custom={}),sel=el('select',{id:'rk'},Object.entries(SND).map(([k,n])=>el('option',{value:k,text:n}))),msg=el('div',{class:'sub',id:'rmsg'});
         const fi=el('input',{type:'file',id:'rf',accept:'audio/*,video/mp4,video/webm',class:'file',onchange:async e=>{const f=e.target.files[0];if(!f)return;const k=sel.value;msg.textContent='読み込み中… '+f.name;
           const ab=await f.arrayBuffer();if(!await loadReal(k,ab.slice(0))){msg.textContent='この形式は再生できませんでした。';return}
           const saveable=/\.(m4a|mp4|webm)$/i.test(f.name)||/^(video\/(mp4|webm)|audio\/(mp4|x-m4a|webm))$/.test(f.type);
-          if(assetsNS&&saveable&&f.size<=20*1024*1024){try{const type=/webm/i.test(f.name)||/webm/.test(f.type)?'video/webm':'video/mp4';const r=await assetsNS.upload(f,{type});if(cs[k]&&cs[k].id)try{await assetsNS.delete(cs[k].id)}catch(e){}cs[k]={id:r.id,name:f.name};save();msg.textContent='「'+SND[k]+'」を差し替えて保存しました（PCとスマホで共通）。'}catch(err){msg.textContent='再生はできますが保存できませんでした（この端末で今だけ使えます）。'}}
+          if(true){try{const r=await saveAudioFile(f);await dropAudioRef(cs[k]);cs[k]={id:r.id,where:r.where,name:f.name};save();if(r.where==='idb'){msg.textContent='「'+SND[k]+'」を差し替えて、この端末に保存しました。';if(!soundsOn)startSounds();renderPanel();return}msg.textContent='「'+SND[k]+'」を差し替えて保存しました（PCとスマホで共通）。'}catch(err){msg.textContent='再生はできますが保存できませんでした（この端末で今だけ使えます）。'}}
           else msg.textContent='「'+SND[k]+'」を差し替えました。mp3やwavはページに保存できないので、この端末で開いている間だけ使えます。';
           if(!soundsOn)startSounds();renderPanel()}});
         const used=Object.keys(SND).filter(k=>realSrc(k)||realBufs[k]);
@@ -2278,7 +2347,7 @@ const PANELS={
           el('div',{class:'sub',text:'合成した音の代わりに、録音ファイルを使えます。フリー素材の雨音や話し声などに入れ替えると、ぐっと自然になります。'}),
           el('div',{class:'row'},sel,el('label',{class:'filebtn',for:'rf'},'ファイルを選ぶ'),fi),msg,
           used.length?el('ul',{class:'list'},used.map(k=>el('li',{},el('span',{style:'flex:1',text:SND[k]+'：'+((cs[k]&&cs[k].name)||(realSrc(k)?'同梱の録音':'今だけ使う録音'))}),
-            el('button',{class:'ghost',text:'合成音に戻す',onclick:async()=>{if(cs[k]&&cs[k].id&&assetsNS)try{await assetsNS.delete(cs[k].id)}catch(e){}delete cs[k];delete realBufs[k];if(chans[k]){try{chans[k].src.stop()}catch(e){}delete chans[k]}save();applySounds();renderPanel()}})))):null,
+            el('button',{class:'ghost',text:'合成音に戻す',onclick:async()=>{await dropAudioRef(cs[k]);delete cs[k];delete realBufs[k];if(chans[k]){try{chans[k].src.stop()}catch(e){}delete chans[k]}save();applySounds();renderPanel()}})))):null,
           el('div',{class:'sub',text:'m4a・mp4・webm（20MBまで）はページに保存されます。ループ再生されるので、1〜3分程度の切れ目の目立たない録音がおすすめです。'}))})(),
       el('div',{class:'sec'},el('label',{class:'chk'},el('input',{type:'checkbox',id:'ch',checked:s.chime,onchange:e=>{s.chime=e.target.checked;save()}}),'ポモドーロ終了時にチャイムを鳴らす'),
         el('label',{class:'chk'},el('input',{type:'checkbox',id:'tych',checked:s.typing!==false,onchange:e=>{s.typing=e.target.checked;save()}}),'集中中に作業の音を小さく鳴らす（PCが点いていればタイピング、消えていればペン）')),
@@ -2618,7 +2687,7 @@ const PCAPPS={
     const fi=el('input',{type:'file',id:'bf',accept:'application/json,.json',class:'file',onchange:e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const o=JSON.parse(t);if(!o||!o.pomo)throw 0;pending=o;conf.hidden=false;msg.textContent='「'+f.name+'」を読み込みます。今の内容はすべて置き換わります。'}catch(err){msg.textContent='このファイルは読み込めません（このページで保存したファイルを選んでください）'}})}});
     const conf=el('div',{class:'row',hidden:true},el('button',{class:'primary',text:'置き換える',onclick:()=>{if(!pending)return;S=normalize(pending);save();staticKey='';setWorld(S.world,true);msg.textContent='読み込みました';conf.hidden=true;renderPC()}}),el('button',{text:'やめる',onclick:()=>{pending=null;conf.hidden=true;msg.textContent=''}}));
     return [el('div',{class:'sec'},el('div',{class:'lbl',text:'ファイルに保存（バックアップ）'}),
-        downloadsNS?el('button',{class:'primary',text:'全データを保存する',onclick:async()=>{try{await downloadsNS.save({filename:'作業部屋_'+dkey()+'.json',data:JSON.stringify(S,null,1)});msg.textContent='保存しました'}catch(e){msg.textContent=e&&e.code==='declined'?'保存を取りやめました':'保存できませんでした'}}}):el('p',{class:'empty',text:'この表示ではファイルに保存できません。'}),
+        downloadsNS?el('button',{class:'primary',text:'全データを保存する',onclick:async()=>{try{await downloadsNS.save({filename:'workplace_'+dkey()+'.json',data:JSON.stringify(S,null,1)});msg.textContent='保存しました'}catch(e){msg.textContent=e&&e.code==='declined'?'保存を取りやめました':'保存できませんでした'}}}):el('p',{class:'empty',text:'この表示ではファイルに保存できません。'}),
         el('div',{class:'sub',text:'ToDo・記録・メモ・執筆・文献・習慣などをまとめて1つのファイルに保存します（保存した曲そのものは含みません）。'})),
       el('div',{class:'sec'},el('div',{class:'lbl',text:'ファイルから戻す'}),el('label',{class:'filebtn',for:'bf'},'ファイルを選ぶ'),fi,conf,msg),
       el('div',{class:'sec'},el('div',{class:'lbl',text:'同期'}),el('div',{class:'sub',text:syncState==='ok'?'PCとスマホで同期しています。':syncState==='err'?'同期に一時的に失敗しています。この端末には保存されています。':'この表示では同期できないため、この端末にだけ保存しています。'}))]},
